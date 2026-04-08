@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const prodVal = await db.execute('SELECT COALESCE(SUM(quantity * price), 0) as val FROM products');
   const matVal = await db.execute('SELECT COALESCE(SUM(quantity * price), 0) as val FROM materials');

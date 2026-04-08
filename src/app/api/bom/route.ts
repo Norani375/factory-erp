@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const productId = req.nextUrl.searchParams.get('product_id');
   if (!productId) return NextResponse.json([]);

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const debtors = await db.execute('SELECT * FROM customers WHERE balance > 0 ORDER BY balance DESC');
   const payments = await db.execute(`

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const result = await db.execute(`
     SELECT i.*, c.name as customer_name FROM invoices i
@@ -19,7 +21,6 @@ export async function POST(req: NextRequest) {
   });
   const invoiceId = Number(invResult.lastInsertRowid);
 
-  // Insert items and reduce stock
   for (const it of items) {
     await db.execute({
       sql: 'INSERT INTO invoice_items (invoice_id, product_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)',
@@ -31,7 +32,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Update customer balance
   const remaining = (total - (discount || 0)) - (paid || 0);
   if (remaining > 0) {
     await db.execute({
@@ -40,7 +40,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Record payment
   if (paid > 0) {
     await db.execute({
       sql: 'INSERT INTO payments (invoice_id, customer_id, amount, method) VALUES (?, ?, ?, ?)',
