@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import Products from '@/components/Products';
@@ -12,9 +12,28 @@ import BOM from '@/components/BOM';
 
 export type Page = 'dashboard' | 'products' | 'materials' | 'customers' | 'sales' | 'debts' | 'reports' | 'bom';
 
+interface UserInfo {
+  userId: number;
+  username: string;
+  role: string;
+}
+
 export default function Home() {
   const [page, setPage] = useState<Page>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [user, setUser] = useState<UserInfo | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => { if (data.authenticated) setUser(data.user); })
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
 
   function renderPage() {
     switch (page) {
@@ -37,6 +56,8 @@ export default function Home() {
         onNavigate={setPage}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        user={user}
+        onLogout={handleLogout}
       />
       <main className="flex-1 overflow-hidden">
         {renderPage()}
