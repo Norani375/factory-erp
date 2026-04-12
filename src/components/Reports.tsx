@@ -19,8 +19,8 @@ export default function Reports() {
   }
 
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto">
-      <div className="tabs tabs-boxed bg-base-200 w-fit">
+    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-4 h-full overflow-y-auto">
+      <div className="tabs tabs-boxed bg-white border border-base-300 shadow-sm w-fit">
         {([['inventory', 'موجودی انبار'], ['sales', 'فروش محصولات'], ['materials', 'مواد مصرفی'], ['profit', 'درآمد ماهانه']] as [ReportType, string][]).map(([key, label]) => (
           <a key={key} className={`tab tab-sm ${reportType === key ? 'tab-active' : ''}`} onClick={() => setReportType(key)}>{label}</a>
         ))}
@@ -29,7 +29,7 @@ export default function Reports() {
       {loading ? (
         <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>
       ) : (
-        <div className="card bg-base-200">
+        <div className="card bg-white border border-base-300 shadow-sm">
           <div className="card-body p-4">
             <div className="overflow-x-auto">
               {reportType === 'inventory' && (

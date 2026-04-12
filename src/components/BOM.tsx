@@ -60,7 +60,7 @@ export default function BOM() {
   const selProd = products.find(p => p.id === selectedProduct);
 
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto">
+    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-4 h-full overflow-y-auto">
       <p className="text-sm text-base-content/60">فرمول ساخت (BOM) مشخص می\u200cکند برای تولید هر محصول چه مواد مصرفی و به چه مقدار نیاز است.</p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -73,7 +73,7 @@ export default function BOM() {
       </div>
 
       {selProd && (
-        <div className="card bg-base-200">
+        <div className="card bg-white border border-base-300 shadow-sm">
           <div className="card-body p-4">
             <h3 className="card-title text-sm">مواد لازم برای: {selProd.name}</h3>
             {bomItems.length === 0 ? (

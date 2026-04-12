@@ -42,7 +42,7 @@ export default function Debts() {
   if (loading) return <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>;
 
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto">
+    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-4 h-full overflow-y-auto">
       <div className="flex flex-wrap items-center gap-2">
         <label className="input input-bordered input-sm flex items-center gap-2 flex-1 min-w-48">
           <Search className="h-[1em] opacity-50" />
@@ -53,7 +53,7 @@ export default function Debts() {
 
       <div className="alert alert-error"><DollarSign size={18} /><span>مجموع بدهی\u200cها: {formatCurrency(totalDebt)}</span></div>
 
-      <div className="card bg-base-200">
+      <div className="card bg-white border border-base-300 shadow-sm">
         <div className="card-body p-4">
           <h3 className="card-title text-sm">لیست بدهکاران</h3>
           <div className="overflow-x-auto">
@@ -80,7 +80,7 @@ export default function Debts() {
         </div>
       </div>
 
-      <div className="card bg-base-200">
+      <div className="card bg-white border border-base-300 shadow-sm">
         <div className="card-body p-4">
           <h3 className="card-title text-sm">تاریخچه پرداخت\u200cها</h3>
           <div className="overflow-x-auto">

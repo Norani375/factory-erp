@@ -34,10 +34,14 @@ const menuItems: { page: Page; label: string; icon: React.ReactNode }[] = [
 
 export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle, user, onLogout }: SidebarProps) {
   return (
-    <div className={`bg-base-200 h-full flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-56'}`}>
+    <div className={`bg-white h-full flex flex-col transition-all duration-300 border-l border-base-300 shadow-lg ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-base-300">
-        {!collapsed && <span className="font-bold text-sm text-primary">🪵 نجاری ERP</span>}
+      <div className="flex items-center justify-between p-3 border-b border-base-300 bg-gradient-to-l from-sky-50 to-white">
+        {!collapsed && (
+          <span className="font-bold text-sm bg-gradient-to-l from-primary to-secondary bg-clip-text text-transparent">
+            🪵 نجاری ERP
+          </span>
+        )}
         <button className="btn btn-ghost btn-xs" onClick={onToggle}>
           {collapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
         </button>
@@ -48,7 +52,11 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle, 
         {menuItems.map((item) => (
           <li key={item.page}>
             <a
-              className={`flex items-center gap-3 ${currentPage === item.page ? 'active' : ''}`}
+              className={`flex items-center gap-3 rounded-lg transition-all ${
+                currentPage === item.page 
+                  ? 'bg-gradient-to-l from-sky-100 to-violet-50 text-primary font-semibold shadow-sm' 
+                  : 'hover:bg-sky-50 text-base-content/70 hover:text-primary'
+              }`}
               onClick={() => onNavigate(item.page)}
             >
               {item.icon}
@@ -59,12 +67,12 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle, 
       </ul>
 
       {/* User & Logout */}
-      <div className="border-t border-base-300 p-2">
+      <div className="border-t border-base-300 p-2 bg-gradient-to-t from-slate-50 to-white">
         {user && !collapsed && (
           <div className="flex items-center gap-2 px-2 py-1 mb-1">
             <UserCircle size={20} className="text-primary shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{user.username}</p>
+              <p className="text-xs font-medium truncate text-base-content">{user.username}</p>
               <p className="text-xs text-base-content/50">
                 {user.role === 'admin' ? 'مدیر' : 'کاربر'}
               </p>

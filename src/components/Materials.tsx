@@ -46,7 +46,7 @@ export default function Materials() {
   if (loading) return <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>;
 
   return (
-    <div className="p-4 space-y-3 h-full overflow-y-auto">
+    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-3 h-full overflow-y-auto">
       <div className="flex flex-wrap items-center gap-2">
         <label className="input input-bordered input-sm flex items-center gap-2 flex-1 min-w-48">
           <Search className="h-[1em] opacity-50" />
