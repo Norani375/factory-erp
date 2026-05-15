@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatNumber, UNITS } from '@/lib/helpers';
 
 interface Material { id: number; name: string; unit: string; quantity: number; price: number; created_at: string; }
@@ -11,6 +11,7 @@ export default function Materials() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Material | null>(null);
   const [form, setForm] = useState({ name: '', unit: 'دانه', quantity: 0, price: 0 });
 
   useEffect(() => { loadMaterials(); }, []);
@@ -35,9 +36,11 @@ export default function Materials() {
     await loadMaterials();
   }
 
-  async function handleDelete(id: number) {
-    await fetch('/api/materials', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    setMaterials(prev => prev.filter(m => m.id !== id));
+  async function handleDelete() {
+    if (!confirmDelete) return;
+    await fetch('/api/materials', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: confirmDelete.id }) });
+    setConfirmDelete(null);
+    await loadMaterials();
   }
 
   const filtered = materials.filter(m => !search || m.name.includes(search));
@@ -73,7 +76,7 @@ export default function Materials() {
                 <td>
                   <div className="flex gap-1">
                     <button className="btn btn-ghost btn-xs" onClick={() => openEdit(m)}><Pencil size={14} /></button>
-                    <button className="btn btn-ghost btn-xs text-error" onClick={() => handleDelete(m.id)}><Trash2 size={14} /></button>
+                    <button className="btn btn-ghost btn-xs text-error" onClick={() => setConfirmDelete(m)}><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -102,6 +105,20 @@ export default function Materials() {
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowModal(false)} />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-error flex items-center gap-2"><AlertTriangle size={20} /> حذف ماده</h3>
+            <p className="py-4">آیا از حذف <strong>{confirmDelete.name}</strong> مطمئن هستید؟</p>
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>انصراف</button>
+              <button className="btn btn-error btn-sm" onClick={handleDelete}>حذف</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setConfirmDelete(null)} />
         </div>
       )}
     </div>

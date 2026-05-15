@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatNumber, CATEGORIES } from '@/lib/helpers';
 
 interface Product {
@@ -15,6 +15,7 @@ export default function Products() {
   const [catFilter, setCatFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [form, setForm] = useState({ name: '', category: 'سایر', dimensions: '', unit: 'عدد', quantity: 0, price: 0 });
 
   useEffect(() => { loadProducts(); }, []);
@@ -39,9 +40,11 @@ export default function Products() {
     await loadProducts();
   }
 
-  async function handleDelete(id: number) {
-    await fetch('/api/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    setProducts(prev => prev.filter(p => p.id !== id));
+  async function handleDelete() {
+    if (!confirmDelete) return;
+    await fetch('/api/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: confirmDelete.id }) });
+    setConfirmDelete(null);
+    await loadProducts();
   }
 
   const filtered = products.filter(p => {
@@ -62,7 +65,7 @@ export default function Products() {
           {search && <X className="h-[1em] opacity-50 cursor-pointer" onClick={() => setSearch('')} />}
         </label>
         <select className="select select-bordered select-sm" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-          <option value="">همه دسته\u200cها</option>
+          <option value="">همه دسته‌ها</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <button className="btn btn-primary btn-sm" onClick={openAdd}><Plus size={16} /> افزودن</button>
@@ -87,7 +90,7 @@ export default function Products() {
                 <td>
                   <div className="flex gap-1">
                     <button className="btn btn-ghost btn-xs" onClick={() => openEdit(p)}><Pencil size={14} /></button>
-                    <button className="btn btn-ghost btn-xs text-error" onClick={() => handleDelete(p.id)}><Trash2 size={14} /></button>
+                    <button className="btn btn-ghost btn-xs text-error" onClick={() => setConfirmDelete(p)}><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -118,6 +121,20 @@ export default function Products() {
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowModal(false)} />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-error flex items-center gap-2"><AlertTriangle size={20} /> حذف محصول</h3>
+            <p className="py-4">آیا از حذف <strong>{confirmDelete.name}</strong> مطمئن هستید؟</p>
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>انصراف</button>
+              <button className="btn btn-error btn-sm" onClick={handleDelete}>حذف</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setConfirmDelete(null)} />
         </div>
       )}
     </div>

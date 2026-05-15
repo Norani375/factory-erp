@@ -24,6 +24,12 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+export async function PUT(req: NextRequest) {
+  const { id, quantity } = await req.json();
+  await db.execute({ sql: 'UPDATE bom SET quantity=? WHERE id=?', args: [quantity, id] });
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
   await db.execute({ sql: 'DELETE FROM bom WHERE id=?', args: [id] });

@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { Plus, Eye, Trash2, Search, X } from 'lucide-react';
+import { Plus, Eye, Pencil, Trash2, Search, X, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/helpers';
 
 interface Invoice { id: number; customer_id: number; customer_name?: string; total: number; discount: number; paid: number; status: string; created_at: string; }
@@ -14,6 +14,8 @@ export default function Sales() {
   const [search, setSearch] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [showDetail, setShowDetail] = useState<Invoice | null>(null);
+  const [showEdit, setShowEdit] = useState<Invoice | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Invoice | null>(null);
   const [detailItems, setDetailItems] = useState<InvoiceItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -22,6 +24,7 @@ export default function Sales() {
   const [paidAmount, setPaidAmount] = useState(0);
   const [payMethod, setPayMethod] = useState('نقد');
   const [items, setItems] = useState<{ product_id: number; quantity: number; price: number }[]>([]);
+  const [editForm, setEditForm] = useState({ discount: 0, paid: 0, status: '', payMethod: 'نقد' });
 
   useEffect(() => { loadAll(); }, []);
 
@@ -54,11 +57,37 @@ export default function Sales() {
     if (!selCustomer || items.length === 0) return;
     const status = paidAmount >= grandTotal ? 'paid' : paidAmount > 0 ? 'partial' : 'pending';
     await fetch('/api/invoices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer_id: selCustomer, total: itemsTotal, discount, paid: paidAmount, status, items, payMethod }),
     });
     setShowNew(false); setItems([]); setDiscount(0); setPaidAmount(0);
+    await loadAll();
+  }
+
+  function openEdit(inv: Invoice) {
+    setEditForm({ discount: inv.discount, paid: inv.paid, status: inv.status, payMethod: 'نقد' });
+    setShowEdit(inv);
+  }
+
+  async function saveEdit() {
+    if (!showEdit) return;
+    const remaining = showEdit.total - editForm.discount - editForm.paid;
+    const status = remaining <= 0 ? 'paid' : editForm.paid > 0 ? 'partial' : 'pending';
+    await fetch('/api/invoices', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: showEdit.id, discount: editForm.discount, paid: editForm.paid, status, payMethod: editForm.payMethod }),
+    });
+    setShowEdit(null);
+    await loadAll();
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) return;
+    await fetch('/api/invoices', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: confirmDelete.id }),
+    });
+    setConfirmDelete(null);
     await loadAll();
   }
 
@@ -69,6 +98,8 @@ export default function Sales() {
   }
 
   const filtered = invoices.filter(inv => !search || (inv.customer_name || '').includes(search) || String(inv.id).includes(search));
+  const totalSales = filtered.reduce((s, inv) => s + inv.total, 0);
+  const totalReceived = filtered.reduce((s, inv) => s + inv.paid, 0);
 
   if (loading) return <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>;
 
@@ -84,6 +115,8 @@ export default function Sales() {
           <Plus size={16} /> فاکتور جدید
         </button>
       </div>
+
+      <div className="text-sm text-base-content/60">{filtered.length} فاکتور | فروش کل: {formatCurrency(totalSales)} | دریافتی: {formatCurrency(totalReceived)}</div>
 
       <div className="overflow-x-auto">
         <table className="table table-zebra table-sm">
@@ -103,7 +136,13 @@ export default function Sales() {
                   </span>
                 </td>
                 <td>{formatDate(inv.created_at)}</td>
-                <td><button className="btn btn-ghost btn-xs" onClick={() => viewDetail(inv)}><Eye size={14} /></button></td>
+                <td>
+                  <div className="flex gap-1">
+                    <button className="btn btn-ghost btn-xs" onClick={() => viewDetail(inv)}><Eye size={14} /></button>
+                    <button className="btn btn-ghost btn-xs" onClick={() => openEdit(inv)}><Pencil size={14} /></button>
+                    <button className="btn btn-ghost btn-xs text-error" onClick={() => setConfirmDelete(inv)}><Trash2 size={14} /></button>
+                  </div>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && <tr><td colSpan={9} className="text-center text-base-content/60">فاکتوری ثبت نشده</td></tr>}
@@ -153,6 +192,45 @@ export default function Sales() {
         </div>
       )}
 
+      {showEdit && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold mb-4">ویرایش فاکتور #{showEdit.id}</h3>
+            <p className="text-sm text-base-content/60 mb-3">مشتری: {showEdit.customer_name} | مبلغ کل: {formatCurrency(showEdit.total)}</p>
+            <div className="space-y-3">
+              <div><label className="label label-text text-xs">تخفیف</label><input className="input input-bordered w-full input-sm" type="number" value={editForm.discount} onChange={e => setEditForm({ ...editForm, discount: Number(e.target.value) })} /></div>
+              <div><label className="label label-text text-xs">مبلغ پرداخت شده</label><input className="input input-bordered w-full input-sm" type="number" value={editForm.paid} onChange={e => setEditForm({ ...editForm, paid: Number(e.target.value) })} /></div>
+              <div><label className="label label-text text-xs">روش پرداخت</label>
+                <select className="select select-bordered w-full select-sm" value={editForm.payMethod} onChange={e => setEditForm({ ...editForm, payMethod: e.target.value })}>
+                  <option value="نقد">نقد</option><option value="چک">چک</option><option value="کارت">کارت</option><option value="انتقال بانکی">انتقال بانکی</option>
+                </select>
+              </div>
+              <div className="bg-base-200 rounded-lg p-3 text-sm">مانده: <strong className="text-error">{formatCurrency(showEdit.total - editForm.discount - editForm.paid)}</strong></div>
+            </div>
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(null)}>انصراف</button>
+              <button className="btn btn-primary btn-sm" onClick={saveEdit}>ذخیره</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setShowEdit(null)} />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-error flex items-center gap-2"><AlertTriangle size={20} /> حذف فاکتور</h3>
+            <p className="py-4">آیا از حذف فاکتور <strong>#{confirmDelete.id}</strong> ({confirmDelete.customer_name}) مطمئن هستید؟</p>
+            <p className="text-sm text-base-content/60">موجودی محصولات و بدهی مشتری برگردانده خواهد شد.</p>
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>انصراف</button>
+              <button className="btn btn-error btn-sm" onClick={handleDelete}>حذف</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setConfirmDelete(null)} />
+        </div>
+      )}
+
       {showDetail && (
         <div className="modal modal-open">
           <div className="modal-box max-w-lg">
@@ -160,11 +238,7 @@ export default function Sales() {
             <p className="text-sm text-base-content/60">مشتری: {showDetail.customer_name} | تاریخ: {formatDate(showDetail.created_at)}</p>
             <table className="table table-sm mt-3">
               <thead><tr><th>محصول</th><th>تعداد</th><th>قیمت</th><th>جمع</th></tr></thead>
-              <tbody>
-                {detailItems.map((it, i) => (
-                  <tr key={i}><td>{it.product_name}</td><td>{it.quantity}</td><td>{formatCurrency(it.price)}</td><td>{formatCurrency(it.total)}</td></tr>
-                ))}
-              </tbody>
+              <tbody>{detailItems.map((it, i) => (<tr key={i}><td>{it.product_name}</td><td>{it.quantity}</td><td>{formatCurrency(it.price)}</td><td>{formatCurrency(it.total)}</td></tr>))}</tbody>
               <tfoot>
                 <tr><td colSpan={3} className="text-left font-bold">جمع کل:</td><td>{formatCurrency(showDetail.total)}</td></tr>
                 {showDetail.discount > 0 && <tr><td colSpan={3} className="text-left">تخفیف:</td><td>{formatCurrency(showDetail.discount)}</td></tr>}
@@ -172,9 +246,7 @@ export default function Sales() {
                 <tr><td colSpan={3} className="text-left font-bold text-error">مانده:</td><td className="text-error">{formatCurrency(showDetail.total - showDetail.discount - showDetail.paid)}</td></tr>
               </tfoot>
             </table>
-            <div className="modal-action">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowDetail(null)}>بستن</button>
-            </div>
+            <div className="modal-action"><button className="btn btn-ghost btn-sm" onClick={() => setShowDetail(null)}>بستن</button></div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowDetail(null)} />
         </div>

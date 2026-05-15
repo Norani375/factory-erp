@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/lib/helpers';
 
 interface Customer { id: number; name: string; phone: string; address: string; type: string; balance: number; created_at: string; }
@@ -12,6 +12,7 @@ export default function Customers() {
   const [typeFilter, setTypeFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Customer | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', address: '', type: 'نقدی' });
 
   useEffect(() => { loadCustomers(); }, []);
@@ -36,9 +37,11 @@ export default function Customers() {
     await loadCustomers();
   }
 
-  async function handleDelete(id: number) {
-    await fetch('/api/customers', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    setCustomers(prev => prev.filter(c => c.id !== id));
+  async function handleDelete() {
+    if (!confirmDelete) return;
+    await fetch('/api/customers', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: confirmDelete.id }) });
+    setConfirmDelete(null);
+    await loadCustomers();
   }
 
   const filtered = customers.filter(c => {
@@ -83,7 +86,7 @@ export default function Customers() {
                 <td>
                   <div className="flex gap-1">
                     <button className="btn btn-ghost btn-xs" onClick={() => openEdit(c)}><Pencil size={14} /></button>
-                    <button className="btn btn-ghost btn-xs text-error" onClick={() => handleDelete(c.id)}><Trash2 size={14} /></button>
+                    <button className="btn btn-ghost btn-xs text-error" onClick={() => setConfirmDelete(c)}><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -111,6 +114,21 @@ export default function Customers() {
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowModal(false)} />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-error flex items-center gap-2"><AlertTriangle size={20} /> حذف مشتری</h3>
+            <p className="py-4">آیا از حذف <strong>{confirmDelete.name}</strong> مطمئن هستید؟</p>
+            <p className="text-sm text-base-content/60">تمام فاکتورها و پرداخت‌های مرتبط نیز حذف خواهند شد.</p>
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>انصراف</button>
+              <button className="btn btn-error btn-sm" onClick={handleDelete}>حذف</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setConfirmDelete(null)} />
         </div>
       )}
     </div>
