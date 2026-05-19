@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatCurrency, formatNumber } from '@/lib/helpers';
 
-type ReportType = 'inventory' | 'sales' | 'materials' | 'profit';
+type ReportType = 'inventory' | 'sales' | 'materials' | 'profit' | 'expenses';
 
 export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>('inventory');
@@ -19,9 +19,9 @@ export default function Reports() {
   }
 
   return (
-    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-4 h-full overflow-y-auto">
-      <div className="tabs tabs-boxed bg-white border border-base-300 shadow-sm w-fit">
-        {([['inventory', 'موجودی انبار'], ['sales', 'فروش محصولات'], ['materials', 'مواد مصرفی'], ['profit', 'درآمد ماهانه']] as [ReportType, string][]).map(([key, label]) => (
+    <div className="p-4 space-y-4 h-full overflow-y-auto">
+      <div className="tabs tabs-boxed bg-base-200 w-fit">
+        {([['inventory', 'موجودی انبار'], ['sales', 'فروش محصولات'], ['materials', 'مواد مصرفی'], ['profit', 'درآمد ماهانه'], ['expenses', 'مصارف']] as [ReportType, string][]).map(([key, label]) => (
           <a key={key} className={`tab tab-sm ${reportType === key ? 'tab-active' : ''}`} onClick={() => setReportType(key)}>{label}</a>
         ))}
       </div>
@@ -29,7 +29,7 @@ export default function Reports() {
       {loading ? (
         <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>
       ) : (
-        <div className="card bg-white border border-base-300 shadow-sm">
+        <div className="card bg-base-200">
           <div className="card-body p-4">
             <div className="overflow-x-auto">
               {reportType === 'inventory' && (
@@ -57,6 +57,16 @@ export default function Reports() {
                     {data.map((d, i) => (<tr key={i}><td>{d.name}</td><td>{d.unit}</td><td>{formatNumber(d.quantity)}</td><td>{formatCurrency(d.price)}</td><td>{formatCurrency(d.total_value)}</td></tr>))}
                   </tbody>
                   <tfoot><tr><td colSpan={4} className="font-bold">جمع ارزش مواد</td><td className="font-bold">{formatCurrency(data.reduce((s: number, d: any) => s + Number(d.total_value), 0))}</td></tr></tfoot>
+                </table>
+              )}
+              {reportType === 'expenses' && (
+                <table className="table table-zebra table-sm">
+                  <thead><tr><th>دسته‌بندی</th><th>تعداد</th><th>مجموع</th></tr></thead>
+                  <tbody>
+                    {data.map((d: any, i: number) => (<tr key={i}><td>{d.category}</td><td>{formatNumber(d.count)}</td><td>{formatCurrency(d.total)}</td></tr>))}
+                    {data.length === 0 && <tr><td colSpan={3} className="text-center text-base-content/60">مصرفی نیست</td></tr>}
+                  </tbody>
+                  <tfoot><tr><td className="font-bold">جمع</td><td>{formatNumber(data.reduce((s: number, d: any) => s + Number(d.count), 0))}</td><td className="font-bold">{formatCurrency(data.reduce((s: number, d: any) => s + Number(d.total), 0))}</td></tr></tfoot>
                 </table>
               )}
               {reportType === 'profit' && (
