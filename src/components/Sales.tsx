@@ -1,254 +1,720 @@
-"use client";
-import React, { useEffect, useState } from 'react';
-import { Plus, Eye, Pencil, Trash2, Search, X, AlertTriangle } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/helpers';
+'use client';
 
-interface Invoice { id: number; customer_id: number; customer_name?: string; total: number; discount: number; paid: number; status: string; created_at: string; }
-interface Product { id: number; name: string; quantity: number; price: number; }
-interface Customer { id: number; name: string; }
-interface InvoiceItem { id: number; product_name?: string; quantity: number; price: number; total: number; }
+import { useState, useEffect } from 'react';
+import {
+  Plus, Search, Eye, Edit2, Trash2, Printer, X,
+  ShoppingCart, DollarSign, AlertCircle, FileText
+} from 'lucide-react';
+import { useToast } from '@/components/Toast';
+import { formatCurrency, formatNumber, formatDate } from '@/lib/helpers';
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+interface Customer {
+  id: number;
+  name: string;
+  phone?: string;
+}
+
+interface InvoiceItem {
+  product_id: number;
+  product_name?: string;
+  quantity: number;
+  price: number;
+  total?: number;
+}
+
+interface Invoice {
+  id: number;
+  invoice_number: string;
+  customer_id: number;
+  customer_name?: string;
+  date: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  paid: number;
+  remaining: number;
+  status: string;
+  notes?: string;
+}
+
+type ModalMode = 'new' | 'edit';
 
 export default function Sales() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [showDetail, setShowDetail] = useState<Invoice | null>(null);
-  const [showEdit, setShowEdit] = useState<Invoice | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Invoice | null>(null);
-  const [detailItems, setDetailItems] = useState<InvoiceItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selCustomer, setSelCustomer] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [paidAmount, setPaidAmount] = useState(0);
-  const [payMethod, setPayMethod] = useState('نقد');
-  const [items, setItems] = useState<{ product_id: number; quantity: number; price: number }[]>([]);
-  const [editForm, setEditForm] = useState({ discount: 0, paid: 0, status: '', payMethod: 'نقد' });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>('new');
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { loadAll(); }, []);
+  const { success, error: toastError } = useToast();
 
-  async function loadAll() {
-    const [inv, prods, custs] = await Promise.all([
-      fetch('/api/invoices').then(r => r.json()),
-      fetch('/api/products').then(r => r.json()),
-      fetch('/api/customers').then(r => r.json()),
-    ]);
-    setInvoices(inv); setProducts(prods); setCustomers(custs);
-    setLoading(false);
-  }
+  // Form state
+  const [formCustomerId, setFormCustomerId] = useState<number>(0);
+  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formItems, setFormItems] = useState<InvoiceItem[]>([{ product_id: 0, quantity: 1, price: 0 }]);
+  const [formDiscount, setFormDiscount] = useState(0);
+  const [formPaid, setFormPaid] = useState(0);
+  const [formNotes, setFormNotes] = useState('');
 
-  function addItem() {
-    if (products.length === 0) return;
-    setItems([...items, { product_id: products[0].id, quantity: 1, price: products[0].price }]);
-  }
-  function updateItem(idx: number, field: string, value: number) {
-    const next = [...items];
-    (next[idx] as any)[field] = value;
-    if (field === 'product_id') { const p = products.find(pp => pp.id === value); if (p) next[idx].price = p.price; }
-    setItems(next);
-  }
-  function removeItem(idx: number) { setItems(items.filter((_, i) => i !== idx)); }
+  useEffect(() => {
+    fetchInvoices();
+    fetchProducts();
+    fetchCustomers();
+  }, []);
 
-  const itemsTotal = items.reduce((s, it) => s + it.quantity * it.price, 0);
-  const grandTotal = itemsTotal - discount;
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/invoices');
+      if (!res.ok) throw new Error('خطا در دریافت فاکتورها');
+      const data = await res.json();
+      setInvoices(data);
+    } catch (err: any) {
+      toastError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  async function saveInvoice() {
-    if (!selCustomer || items.length === 0) return;
-    const status = paidAmount >= grandTotal ? 'paid' : paidAmount > 0 ? 'partial' : 'pending';
-    await fetch('/api/invoices', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_id: selCustomer, total: itemsTotal, discount, paid: paidAmount, status, items, payMethod }),
-    });
-    setShowNew(false); setItems([]); setDiscount(0); setPaidAmount(0);
-    await loadAll();
-  }
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data);
+      }
+    } catch {}
+  };
 
-  function openEdit(inv: Invoice) {
-    setEditForm({ discount: inv.discount, paid: inv.paid, status: inv.status, payMethod: 'نقد' });
-    setShowEdit(inv);
-  }
+  const fetchCustomers = async () => {
+    try {
+      const res = await fetch('/api/customers');
+      if (res.ok) {
+        const data = await res.json();
+        setCustomers(data);
+      }
+    } catch {}
+  };
 
-  async function saveEdit() {
-    if (!showEdit) return;
-    const remaining = showEdit.total - editForm.discount - editForm.paid;
-    const status = remaining <= 0 ? 'paid' : editForm.paid > 0 ? 'partial' : 'pending';
-    await fetch('/api/invoices', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: showEdit.id, discount: editForm.discount, paid: editForm.paid, status, payMethod: editForm.payMethod }),
-    });
-    setShowEdit(null);
-    await loadAll();
-  }
+  const resetForm = () => {
+    setFormCustomerId(0);
+    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormItems([{ product_id: 0, quantity: 1, price: 0 }]);
+    setFormDiscount(0);
+    setFormPaid(0);
+    setFormNotes('');
+  };
 
-  async function handleDelete() {
-    if (!confirmDelete) return;
-    await fetch('/api/invoices', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: confirmDelete.id }),
-    });
-    setConfirmDelete(null);
-    await loadAll();
-  }
+  const openNew = () => {
+    resetForm();
+    setModalMode('new');
+    setShowModal(true);
+  };
 
-  async function viewDetail(inv: Invoice) {
-    const data = await fetch(`/api/invoices/${inv.id}`).then(r => r.json());
-    setDetailItems(data);
-    setShowDetail(inv);
-  }
+  const openEdit = (inv: Invoice) => {
+    setModalMode('edit');
+    setSelectedInvoice(inv);
+    setFormCustomerId(inv.customer_id);
+    setFormDate(inv.date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+    setFormItems(
+      inv.items.map(it => ({
+        product_id: it.product_id,
+        quantity: it.quantity,
+        price: it.price,
+      }))
+    );
+    setFormDiscount(inv.discount || 0);
+    setFormPaid(inv.paid || 0);
+    setFormNotes(inv.notes || '');
+    setShowModal(true);
+  };
 
-  const filtered = invoices.filter(inv => !search || (inv.customer_name || '').includes(search) || String(inv.id).includes(search));
-  const totalSales = filtered.reduce((s, inv) => s + inv.total, 0);
-  const totalReceived = filtered.reduce((s, inv) => s + inv.paid, 0);
+  const openDetail = async (inv: Invoice) => {
+    try {
+      const res = await fetch(`/api/invoices/${inv.id}`);
+      if (!res.ok) throw new Error('خطا در دریافت جزئیات');
+      const data = await res.json();
+      setSelectedInvoice(data);
+      setShowDetail(true);
+    } catch (err: any) {
+      toastError(err.message);
+    }
+  };
 
-  if (loading) return <div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg text-primary" /></div>;
+  const addItem = () => {
+    setFormItems([...formItems, { product_id: 0, quantity: 1, price: 0 }]);
+  };
+
+  const removeItem = (index: number) => {
+    if (formItems.length === 1) return;
+    setFormItems(formItems.filter((_, i) => i !== index));
+  };
+
+  const updateItem = (index: number, field: keyof InvoiceItem, value: number) => {
+    const updated = [...formItems];
+    (updated[index] as any)[field] = value;
+    // Auto-fill price from product
+    if (field === 'product_id' && value > 0) {
+      const prod = products.find(p => p.id === value);
+      if (prod) updated[index].price = prod.price;
+    }
+    setFormItems(updated);
+  };
+
+  const subtotal = formItems.reduce((sum, it) => sum + it.quantity * it.price, 0);
+  const total = subtotal - formDiscount;
+  const remaining = total - formPaid;
+
+  const handleSave = async () => {
+    if (!formCustomerId) {
+      toastError('لطفا مشتری را انتخاب کنید');
+      return;
+    }
+    if (formItems.some(it => !it.product_id || it.quantity <= 0)) {
+      toastError('لطفا اقلام فاکتور را کامل کنید');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const body = {
+        customer_id: formCustomerId,
+        date: formDate,
+        items: formItems.map(it => ({
+          product_id: it.product_id,
+          quantity: it.quantity,
+          price: it.price,
+        })),
+        discount: formDiscount,
+        paid: formPaid,
+        notes: formNotes,
+      };
+
+      const url = modalMode === 'new' ? '/api/invoices' : `/api/invoices/${selectedInvoice?.id}`;
+      const method = modalMode === 'new' ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'خطا در ذخیره فاکتور');
+      }
+
+      success(modalMode === 'new' ? 'فاکتور با موفقیت ایجاد شد' : 'فاکتور با موفقیت ویرایش شد');
+      setShowModal(false);
+      fetchInvoices();
+    } catch (err: any) {
+      toastError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = (id: number) => {
+    setDeleteId(id);
+    setShowConfirmDelete(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      const res = await fetch(`/api/invoices/${deleteId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('خطا در حذف فاکتور');
+      success('فاکتور با موفقیت حذف شد');
+      setShowConfirmDelete(false);
+      setDeleteId(null);
+      fetchInvoices();
+    } catch (err: any) {
+      toastError(err.message);
+    }
+  };
+
+  const printInvoice = (inv: Invoice) => {
+    const itemsHtml = (inv.items || []).map((it, i) => `
+      <tr>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${i + 1}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:right">${it.product_name || 'محصول ' + it.product_id}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${it.quantity}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:left">${Number(it.price).toLocaleString()} ؋</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:left">${(it.quantity * it.price).toLocaleString()} ؋</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="fa">
+      <head>
+        <meta charset="UTF-8">
+        <title>فاکتور ${inv.invoice_number}</title>
+        <style>
+          body { font-family: Tahoma, Arial, sans-serif; padding: 20px; color: #333; max-width: 800px; margin: 0 auto; }
+          h1 { text-align: center; color: #2563eb; margin-bottom: 4px; }
+          .subtitle { text-align: center; color: #666; margin-bottom: 24px; }
+          .info { display: flex; justify-content: space-between; margin-bottom: 16px; padding: 12px; background: #f9fafb; border-radius: 8px; }
+          .info div { font-size: 14px; }
+          .info strong { color: #111; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          th { background: #2563eb; color: white; padding: 8px; text-align: center; }
+          .totals { margin-top: 12px; text-align: left; }
+          .totals div { padding: 4px 0; font-size: 14px; }
+          .totals .grand { font-size: 18px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; padding-top: 8px; margin-top: 8px; }
+          .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 12px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>نجاری ERP</h1>
+        <p class="subtitle">فاکتور فروش</p>
+        <div class="info">
+          <div><strong>شماره فاکتور:</strong> ${inv.invoice_number}</div>
+          <div><strong>تاریخ:</strong> ${formatDate(inv.date)}</div>
+          <div><strong>مشتری:</strong> ${inv.customer_name || '-'}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px">#</th>
+              <th>محصول</th>
+              <th style="width:60px">تعداد</th>
+              <th style="width:100px">قیمت واحد</th>
+              <th style="width:100px">مجموع</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+        <div class="totals">
+          <div>جمع کل: ${Number(inv.subtotal).toLocaleString()} ؋</div>
+          <div>تخفیف: ${Number(inv.discount || 0).toLocaleString()} ؋</div>
+          <div class="grand">مبلغ قابل پرداخت: ${Number(inv.total).toLocaleString()} ؋</div>
+          <div>پرداخت شده: ${Number(inv.paid || 0).toLocaleString()} ؋</div>
+          <div>باقیمانده: ${Number(inv.remaining || 0).toLocaleString()} ؋</div>
+        </div>
+        <div class="footer">نجاری ERP - سیستم مدیریت نجاری</div>
+      </body>
+      </html>
+    `;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.setTimeout(() => win.print(), 500);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return <span className="badge badge-success badge-sm gap-1">پرداخت شده</span>;
+      case 'partial':
+        return <span className="badge badge-warning badge-sm gap-1">ناقص</span>;
+      case 'unpaid':
+        return <span className="badge badge-error badge-sm gap-1">پرداخت نشده</span>;
+      default:
+        return <span className="badge badge-ghost badge-sm">{status}</span>;
+    }
+  };
+
+  const filtered = invoices.filter(inv =>
+    (inv.invoice_number || '').includes(search) ||
+    (inv.customer_name || '').includes(search)
+  );
+
+  const totalSales = filtered.reduce((s, i) => s + (i.total || 0), 0);
+  const totalReceived = filtered.reduce((s, i) => s + (i.paid || 0), 0);
+  const totalRemaining = filtered.reduce((s, i) => s + (i.remaining || 0), 0);
 
   return (
-    <div className="p-4 bg-gradient-to-br from-slate-50 to-white space-y-3 h-full overflow-y-auto">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="input input-bordered input-sm flex items-center gap-2 flex-1 min-w-48">
-          <Search className="h-[1em] opacity-50" />
-          <input className="grow" placeholder="جستجو فاکتور..." value={search} onChange={e => setSearch(e.target.value)} />
-          {search && <X className="h-[1em] opacity-50 cursor-pointer" onClick={() => setSearch('')} />}
-        </label>
-        <button className="btn btn-primary btn-sm" onClick={() => { setShowNew(true); setItems([]); setDiscount(0); setPaidAmount(0); setSelCustomer(customers[0]?.id || 0); }}>
-          <Plus size={16} /> فاکتور جدید
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="card bg-base-100 shadow-sm animate-fade-in">
+          <div className="card-body p-3 flex-row items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <ShoppingCart className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-base-content/60">مجموع فروش</p>
+              <p className="font-bold text-primary">{formatCurrency(totalSales)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card bg-base-100 shadow-sm animate-fade-in">
+          <div className="card-body p-3 flex-row items-center gap-3">
+            <div className="p-2 rounded-lg bg-success/10">
+              <DollarSign className="w-5 h-5 text-success" />
+            </div>
+            <div>
+              <p className="text-xs text-base-content/60">مجموع دریافتی</p>
+              <p className="font-bold text-success">{formatCurrency(totalReceived)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card bg-base-100 shadow-sm animate-fade-in">
+          <div className="card-body p-3 flex-row items-center gap-3">
+            <div className="p-2 rounded-lg bg-error/10">
+              <AlertCircle className="w-5 h-5 text-error" />
+            </div>
+            <div>
+              <p className="text-xs text-base-content/60">مجموع باقیمانده</p>
+              <p className="font-bold text-error">{formatCurrency(totalRemaining)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="join w-full sm:w-auto">
+          <div className="join-item flex items-center px-3 bg-base-200">
+            <Search className="w-4 h-4 text-base-content/50" />
+          </div>
+          <input
+            type="text"
+            placeholder="جستجو شماره فاکتور یا مشتری..."
+            className="input input-bordered join-item w-full sm:w-72"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-primary gap-2 w-full sm:w-auto" onClick={openNew}>
+          <Plus className="w-4 h-4" />
+          فاکتور جدید
         </button>
       </div>
 
-      <div className="text-sm text-base-content/60">{filtered.length} فاکتور | فروش کل: {formatCurrency(totalSales)} | دریافتی: {formatCurrency(totalReceived)}</div>
-
-      <div className="overflow-x-auto">
-        <table className="table table-zebra table-sm">
-          <thead><tr><th>#</th><th>مشتری</th><th>مبلغ کل</th><th>تخفیف</th><th>پرداخت شده</th><th>مانده</th><th>وضعیت</th><th>تاریخ</th><th>عملیات</th></tr></thead>
-          <tbody>
-            {filtered.map(inv => (
-              <tr key={inv.id}>
-                <td>{inv.id}</td>
-                <td>{inv.customer_name}</td>
-                <td>{formatCurrency(inv.total)}</td>
-                <td>{inv.discount > 0 ? formatCurrency(inv.discount) : '-'}</td>
-                <td>{formatCurrency(inv.paid)}</td>
-                <td className={inv.total - inv.discount - inv.paid > 0 ? 'text-error' : ''}>{formatCurrency(inv.total - inv.discount - inv.paid)}</td>
-                <td>
-                  <span className={`badge badge-sm ${inv.status === 'paid' ? 'badge-success' : inv.status === 'partial' ? 'badge-warning' : 'badge-error'}`}>
-                    {inv.status === 'paid' ? 'تسویه' : inv.status === 'partial' ? 'ناقص' : 'بدهکار'}
-                  </span>
-                </td>
-                <td>{formatDate(inv.created_at)}</td>
-                <td>
-                  <div className="flex gap-1">
-                    <button className="btn btn-ghost btn-xs" onClick={() => viewDetail(inv)}><Eye size={14} /></button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => openEdit(inv)}><Pencil size={14} /></button>
-                    <button className="btn btn-ghost btn-xs text-error" onClick={() => setConfirmDelete(inv)}><Trash2 size={14} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="text-center text-base-content/60">فاکتوری ثبت نشده</td></tr>}
-          </tbody>
-        </table>
+      {/* Invoices Table */}
+      <div className="card bg-base-100 shadow-md">
+        <div className="card-body p-0">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <span className="loading loading-spinner loading-md"></span>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-base-content/50">
+              <FileText className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p>فاکتوری یافت نشد</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>شماره</th>
+                    <th>مشتری</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ کل</th>
+                    <th>پرداختی</th>
+                    <th>باقیمانده</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(inv => (
+                    <tr key={inv.id} className="hover">
+                      <td className="font-mono text-sm">{inv.invoice_number}</td>
+                      <td>{inv.customer_name}</td>
+                      <td className="text-sm">{formatDate(inv.date)}</td>
+                      <td className="font-medium">{formatCurrency(inv.total)}</td>
+                      <td>{formatCurrency(inv.paid)}</td>
+                      <td className={inv.remaining > 0 ? 'text-error font-medium' : ''}>
+                        {formatCurrency(inv.remaining)}
+                      </td>
+                      <td>{getStatusBadge(inv.status)}</td>
+                      <td>
+                        <div className="flex gap-1">
+                          <button
+                            className="btn btn-ghost btn-xs tooltip"
+                            data-tip="مشاهده"
+                            onClick={() => openDetail(inv)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs tooltip"
+                            data-tip="ویرایش"
+                            onClick={() => openEdit(inv)}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs text-error tooltip"
+                            data-tip="حذف"
+                            onClick={() => confirmDelete(inv.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      {showNew && (
+      {/* New/Edit Modal */}
+      {showModal && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-2xl">
-            <h3 className="font-bold mb-4">فاکتور جدید</h3>
-            <div className="space-y-3">
-              <select className="select select-bordered w-full select-sm" value={selCustomer} onChange={e => setSelCustomer(Number(e.target.value))}>
-                <option value={0}>انتخاب مشتری...</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <div className="divider text-xs">اقلام فاکتور</div>
-              {items.map((it, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <select className="select select-bordered select-xs flex-1" value={it.product_id} onChange={e => updateItem(idx, 'product_id', Number(e.target.value))}>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.name} (موجودی: {p.quantity})</option>)}
-                  </select>
-                  <input className="input input-bordered input-xs w-16" type="number" min={1} value={it.quantity} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))} />
-                  <input className="input input-bordered input-xs w-24" type="number" value={it.price} onChange={e => updateItem(idx, 'price', Number(e.target.value))} />
-                  <span className="text-xs w-24">{formatCurrency(it.quantity * it.price)}</span>
-                  <button className="btn btn-ghost btn-xs text-error" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
-                </div>
-              ))}
-              <button className="btn btn-outline btn-xs" onClick={addItem}><Plus size={14} /> افزودن قلم</button>
-              <div className="divider text-xs">محاسبات</div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>جمع اقلام: <strong>{formatCurrency(itemsTotal)}</strong></div>
-                <div><label className="text-xs text-base-content/60">تخفیف:</label><input className="input input-bordered input-xs w-full" type="number" value={discount} onChange={e => setDiscount(Number(e.target.value))} /></div>
-                <div>مبلغ نهایی: <strong className="text-primary">{formatCurrency(grandTotal)}</strong></div>
-                <div><label className="text-xs text-base-content/60">مبلغ پرداختی:</label><input className="input input-bordered input-xs w-full" type="number" value={paidAmount} onChange={e => setPaidAmount(Number(e.target.value))} /></div>
-              </div>
-              <select className="select select-bordered select-xs" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                <option value="نقد">نقد</option><option value="چک">چک</option><option value="کارت">کارت</option><option value="انتقال بانکی">انتقال بانکی</option>
-              </select>
-            </div>
-            <div className="modal-action">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowNew(false)}>انصراف</button>
-              <button className="btn btn-primary btn-sm" onClick={saveInvoice} disabled={!selCustomer || items.length === 0}>ثبت فاکتور</button>
-            </div>
-          </div>
-          <div className="modal-backdrop" onClick={() => setShowNew(false)} />
-        </div>
-      )}
+          <div className="modal-box max-w-3xl">
+            <button className="btn btn-sm btn-circle btn-ghost absolute left-2 top-2" onClick={() => setShowModal(false)}>
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="font-bold text-lg mb-4">
+              {modalMode === 'new' ? 'فاکتور جدید' : 'ویرایش فاکتور'}
+            </h3>
 
-      {showEdit && (
-        <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold mb-4">ویرایش فاکتور #{showEdit.id}</h3>
-            <p className="text-sm text-base-content/60 mb-3">مشتری: {showEdit.customer_name} | مبلغ کل: {formatCurrency(showEdit.total)}</p>
-            <div className="space-y-3">
-              <div><label className="label label-text text-xs">تخفیف</label><input className="input input-bordered w-full input-sm" type="number" value={editForm.discount} onChange={e => setEditForm({ ...editForm, discount: Number(e.target.value) })} /></div>
-              <div><label className="label label-text text-xs">مبلغ پرداخت شده</label><input className="input input-bordered w-full input-sm" type="number" value={editForm.paid} onChange={e => setEditForm({ ...editForm, paid: Number(e.target.value) })} /></div>
-              <div><label className="label label-text text-xs">روش پرداخت</label>
-                <select className="select select-bordered w-full select-sm" value={editForm.payMethod} onChange={e => setEditForm({ ...editForm, payMethod: e.target.value })}>
-                  <option value="نقد">نقد</option><option value="چک">چک</option><option value="کارت">کارت</option><option value="انتقال بانکی">انتقال بانکی</option>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div className="form-control">
+                <label className="label"><span className="label-text">مشتری</span></label>
+                <select
+                  className="select select-bordered"
+                  value={formCustomerId}
+                  onChange={e => setFormCustomerId(Number(e.target.value))}
+                >
+                  <option value={0}>انتخاب مشتری...</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
-              <div className="bg-base-200 rounded-lg p-3 text-sm">مانده: <strong className="text-error">{formatCurrency(showEdit.total - editForm.discount - editForm.paid)}</strong></div>
+              <div className="form-control">
+                <label className="label"><span className="label-text">تاریخ</span></label>
+                <input
+                  type="date"
+                  className="input input-bordered"
+                  value={formDate}
+                  onChange={e => setFormDate(e.target.value)}
+                />
+              </div>
             </div>
+
+            {/* Items */}
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <label className="label-text font-medium">اقلام فاکتور</label>
+                <button className="btn btn-sm btn-ghost gap-1" onClick={addItem}>
+                  <Plus className="w-3 h-3" /> افزودن
+                </button>
+              </div>
+              <div className="space-y-2">
+                {formItems.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 items-end">
+                    <div className="form-control flex-1">
+                      {idx === 0 && <label className="label py-0"><span className="label-text text-xs">محصول</span></label>}
+                      <select
+                        className="select select-bordered select-sm"
+                        value={item.product_id}
+                        onChange={e => updateItem(idx, 'product_id', Number(e.target.value))}
+                      >
+                        <option value={0}>انتخاب...</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-control w-20">
+                      {idx === 0 && <label className="label py-0"><span className="label-text text-xs">تعداد</span></label>}
+                      <input
+                        type="number"
+                        className="input input-bordered input-sm"
+                        min={1}
+                        value={item.quantity}
+                        onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="form-control w-28">
+                      {idx === 0 && <label className="label py-0"><span className="label-text text-xs">قیمت</span></label>}
+                      <input
+                        type="number"
+                        className="input input-bordered input-sm"
+                        min={0}
+                        value={item.price}
+                        onChange={e => updateItem(idx, 'price', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="w-24 text-sm text-left font-medium pt-1">
+                      {formatCurrency(item.quantity * item.price)}
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm btn-square text-error"
+                      onClick={() => removeItem(idx)}
+                      disabled={formItems.length === 1}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="form-control">
+                <label className="label"><span className="label-text text-xs">جمع</span></label>
+                <input type="text" className="input input-bordered input-sm bg-base-200" value={formatCurrency(subtotal)} readOnly />
+              </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text text-xs">تخفیف</span></label>
+                <input
+                  type="number"
+                  className="input input-bordered input-sm"
+                  min={0}
+                  value={formDiscount}
+                  onChange={e => setFormDiscount(Number(e.target.value))}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text text-xs">پرداختی</span></label>
+                <input
+                  type="number"
+                  className="input input-bordered input-sm"
+                  min={0}
+                  value={formPaid}
+                  onChange={e => setFormPaid(Number(e.target.value))}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text text-xs">باقیمانده</span></label>
+                <input
+                  type="text"
+                  className={`input input-bordered input-sm bg-base-200 ${remaining > 0 ? 'text-error' : 'text-success'}`}
+                  value={formatCurrency(remaining)}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div className="form-control mb-4">
+              <label className="label"><span className="label-text">یادداشت</span></label>
+              <textarea
+                className="textarea textarea-bordered"
+                rows={2}
+                value={formNotes}
+                onChange={e => setFormNotes(e.target.value)}
+                placeholder="یادداشت اختیاری..."
+              />
+            </div>
+
             <div className="modal-action">
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(null)}>انصراف</button>
-              <button className="btn btn-primary btn-sm" onClick={saveEdit}>ذخیره</button>
+              <button className="btn btn-ghost" onClick={() => setShowModal(false)}>انصراف</button>
+              <button className="btn btn-primary gap-2" onClick={handleSave} disabled={saving}>
+                {saving && <span className="loading loading-spinner loading-xs"></span>}
+                {modalMode === 'new' ? 'ذخیره' : 'بروزرسانی'}
+              </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => setShowEdit(null)} />
+          <div className="modal-backdrop" onClick={() => setShowModal(false)} />
         </div>
       )}
 
-      {confirmDelete && (
+      {/* Detail Modal */}
+      {showDetail && selectedInvoice && (
         <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-error flex items-center gap-2"><AlertTriangle size={20} /> حذف فاکتور</h3>
-            <p className="py-4">آیا از حذف فاکتور <strong>#{confirmDelete.id}</strong> ({confirmDelete.customer_name}) مطمئن هستید؟</p>
-            <p className="text-sm text-base-content/60">موجودی محصولات و بدهی مشتری برگردانده خواهد شد.</p>
+          <div className="modal-box max-w-2xl">
+            <button className="btn btn-sm btn-circle btn-ghost absolute left-2 top-2" onClick={() => setShowDetail(false)}>
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="font-bold text-lg mb-4">جزئیات فاکتور {selectedInvoice.invoice_number}</h3>
+
+            <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+              <div><span className="text-base-content/60">مشتری:</span> <strong>{selectedInvoice.customer_name}</strong></div>
+              <div><span className="text-base-content/60">تاریخ:</span> <strong>{formatDate(selectedInvoice.date)}</strong></div>
+              <div><span className="text-base-content/60">وضعیت:</span> {getStatusBadge(selectedInvoice.status)}</div>
+              <div><span className="text-base-content/60">شماره:</span> <strong className="font-mono">{selectedInvoice.invoice_number}</strong></div>
+            </div>
+
+            <div className="overflow-x-auto mb-4">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>محصول</th>
+                    <th>تعداد</th>
+                    <th>قیمت واحد</th>
+                    <th>مجموع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selectedInvoice.items || []).map((it, idx) => (
+                    <tr key={idx}>
+                      <td>{idx + 1}</td>
+                      <td>{it.product_name || 'محصول ' + it.product_id}</td>
+                      <td>{formatNumber(it.quantity)}</td>
+                      <td>{formatCurrency(it.price)}</td>
+                      <td className="font-medium">{formatCurrency(it.quantity * it.price)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-base-200 rounded-lg p-4 space-y-2 text-sm">
+              <div className="flex justify-between"><span>جمع کل:</span> <span className="font-medium">{formatCurrency(selectedInvoice.subtotal)}</span></div>
+              <div className="flex justify-between"><span>تخفیف:</span> <span>{formatCurrency(selectedInvoice.discount || 0)}</span></div>
+              <div className="divider my-1"></div>
+              <div className="flex justify-between font-bold text-base"><span>مبلغ نهایی:</span> <span className="text-primary">{formatCurrency(selectedInvoice.total)}</span></div>
+              <div className="flex justify-between"><span>پرداخت شده:</span> <span className="text-success">{formatCurrency(selectedInvoice.paid || 0)}</span></div>
+              <div className="flex justify-between"><span>باقیمانده:</span> <span className={selectedInvoice.remaining > 0 ? 'text-error font-medium' : 'text-success'}>{formatCurrency(selectedInvoice.remaining || 0)}</span></div>
+            </div>
+
+            {selectedInvoice.notes && (
+              <div className="mt-3 text-sm text-base-content/70">
+                <span className="font-medium">یادداشت:</span> {selectedInvoice.notes}
+              </div>
+            )}
+
             <div className="modal-action">
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>انصراف</button>
-              <button className="btn btn-error btn-sm" onClick={handleDelete}>حذف</button>
+              <button className="btn btn-ghost" onClick={() => setShowDetail(false)}>بستن</button>
+              <button
+                className="btn btn-outline btn-info gap-2"
+                onClick={() => printInvoice(selectedInvoice)}
+              >
+                <Printer className="w-4 h-4" />
+                چاپ
+              </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => setConfirmDelete(null)} />
+          <div className="modal-backdrop" onClick={() => setShowDetail(false)} />
         </div>
       )}
 
-      {showDetail && (
+      {/* Delete Confirmation Modal */}
+      {showConfirmDelete && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-lg">
-            <h3 className="font-bold mb-2">فاکتور #{showDetail.id}</h3>
-            <p className="text-sm text-base-content/60">مشتری: {showDetail.customer_name} | تاریخ: {formatDate(showDetail.created_at)}</p>
-            <table className="table table-sm mt-3">
-              <thead><tr><th>محصول</th><th>تعداد</th><th>قیمت</th><th>جمع</th></tr></thead>
-              <tbody>{detailItems.map((it, i) => (<tr key={i}><td>{it.product_name}</td><td>{it.quantity}</td><td>{formatCurrency(it.price)}</td><td>{formatCurrency(it.total)}</td></tr>))}</tbody>
-              <tfoot>
-                <tr><td colSpan={3} className="text-left font-bold">جمع کل:</td><td>{formatCurrency(showDetail.total)}</td></tr>
-                {showDetail.discount > 0 && <tr><td colSpan={3} className="text-left">تخفیف:</td><td>{formatCurrency(showDetail.discount)}</td></tr>}
-                <tr><td colSpan={3} className="text-left font-bold">پرداخت شده:</td><td>{formatCurrency(showDetail.paid)}</td></tr>
-                <tr><td colSpan={3} className="text-left font-bold text-error">مانده:</td><td className="text-error">{formatCurrency(showDetail.total - showDetail.discount - showDetail.paid)}</td></tr>
-              </tfoot>
-            </table>
-            <div className="modal-action"><button className="btn btn-ghost btn-sm" onClick={() => setShowDetail(null)}>بستن</button></div>
+          <div className="modal-box max-w-sm">
+            <h3 className="font-bold text-lg mb-2">تأیید حذف</h3>
+            <p className="text-base-content/70">آیا از حذف این فاکتور مطمئن هستید؟ این عمل قابل بازگشت نیست.</p>
+            <div className="modal-action">
+              <button className="btn btn-ghost" onClick={() => { setShowConfirmDelete(false); setDeleteId(null); }}>انصراف</button>
+              <button className="btn btn-error gap-2" onClick={handleDelete}>
+                <Trash2 className="w-4 h-4" />
+                حذف
+              </button>
+            </div>
           </div>
-          <div className="modal-backdrop" onClick={() => setShowDetail(null)} />
+          <div className="modal-backdrop" onClick={() => { setShowConfirmDelete(false); setDeleteId(null); }} />
         </div>
       )}
     </div>

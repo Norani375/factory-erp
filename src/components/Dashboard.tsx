@@ -1,7 +1,27 @@
-"use client";
-import React, { useEffect, useState } from 'react';
-import { Package, Wrench, Users, AlertTriangle, TrendingUp, DollarSign, Wallet } from 'lucide-react';
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  Package, Layers, Box, Users, ShoppingCart, TrendingUp,
+  TrendingDown, DollarSign, AlertTriangle, BarChart3
+} from 'lucide-react';
+import { useToast } from '@/components/Toast';
 import { formatCurrency, formatNumber } from '@/lib/helpers';
+
+interface LowStockProduct {
+  name: string;
+  quantity: number;
+}
+
+interface CategorySale {
+  category: string;
+  total: number;
+}
+
+interface TopProduct {
+  name: string;
+  qty: number;
+}
 
 interface Stats {
   totalProductsValue: number;
@@ -13,89 +33,219 @@ interface Stats {
   totalSalesMonth: number;
   totalExpensesMonth: number;
   totalExpenses: number;
-  lowStockProducts: { name: string; quantity: number }[];
-  categorySales: { category: string; total: number }[];
-  topProducts: { name: string; qty: number }[];
-}
-
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
-  return (
-    <div className="card bg-base-200 border border-base-300">
-      <div className="card-body p-3 gap-1">
-        <div className={`text-${color} opacity-80`}>{icon}</div>
-        <p className="text-base-content/60 text-xs">{label}</p>
-        <p className="font-bold text-sm">{value}</p>
-      </div>
-    </div>
-  );
+  lowStockProducts: LowStockProduct[];
+  categorySales: CategorySale[];
+  topProducts: TopProduct[];
 }
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { error: toastError } = useToast();
 
   useEffect(() => {
-    fetch('/api/stats').then(r => r.json()).then(setStats).catch(console.error).finally(() => setLoading(false));
+    fetchStats();
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center h-full"><span className="loading loading-spinner loading-lg text-primary" /></div>;
-  if (!stats) return <div className="alert alert-error">خطا در بارگذاری</div>;
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/stats');
+      if (!res.ok) throw new Error('خطا در دریافت آمار');
+      const data = await res.json();
+      setStats(data);
+    } catch (err: any) {
+      toastError(err.message || 'خطا در دریافت آمار');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="alert alert-error">
+        <AlertTriangle className="w-5 h-5" />
+        <span>خطا در بارگذاری داشبورد</span>
+        <button className="btn btn-sm btn-ghost" onClick={fetchStats}>تلاش مجدد</button>
+      </div>
+    );
+  }
 
   const profit = stats.totalSalesMonth - stats.totalExpensesMonth;
+  const maxCategorySale = stats.categorySales.length > 0
+    ? Math.max(...stats.categorySales.map(c => c.total))
+    : 1;
+
+  const statCards = [
+    { title: 'ارزش کل موجودی', value: formatCurrency(stats.totalInventoryValue), icon: Package, color: 'primary' },
+    { title: 'ارزش محصولات', value: formatCurrency(stats.totalProductsValue), icon: Box, color: 'success' },
+    { title: 'ارزش مواد', value: formatCurrency(stats.totalMaterialsValue), icon: Layers, color: 'info' },
+    { title: 'مشتریان', value: formatNumber(stats.totalCustomers), icon: Users, color: 'secondary' },
+    { title: 'فروش امروز', value: formatCurrency(stats.totalSalesToday), icon: ShoppingCart, color: 'warning' },
+    { title: 'فروش ماه', value: formatCurrency(stats.totalSalesMonth), icon: TrendingUp, color: 'accent' },
+    { title: 'مصارف ماه', value: formatCurrency(stats.totalExpensesMonth), icon: TrendingDown, color: 'error' },
+    { title: 'سود/زیان ماه', value: formatCurrency(Math.abs(profit)), icon: DollarSign, color: profit >= 0 ? 'success' : 'error' },
+  ];
 
   return (
-    <div className="p-4 space-y-4 overflow-y-auto h-full">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={<DollarSign />} label="ارزش کل موجودی" value={formatCurrency(stats.totalInventoryValue)} color="primary" />
-        <StatCard icon={<Package />} label="ارزش محصولات" value={formatCurrency(stats.totalProductsValue)} color="success" />
-        <StatCard icon={<Wrench />} label="ارزش مواد" value={formatCurrency(stats.totalMaterialsValue)} color="info" />
-        <StatCard icon={<Users />} label="مشتریان" value={formatNumber(stats.totalCustomers)} color="secondary" />
-        <StatCard icon={<TrendingUp />} label="فروش امروز" value={formatCurrency(stats.totalSalesToday)} color="warning" />
-        <StatCard icon={<TrendingUp />} label="فروش ماه" value={formatCurrency(stats.totalSalesMonth)} color="accent" />
-        <StatCard icon={<Wallet />} label="مصارف ماه" value={formatCurrency(stats.totalExpensesMonth)} color="error" />
-        <StatCard icon={<DollarSign />} label="سود/زیان ماه" value={formatCurrency(profit)} color={profit >= 0 ? "success" : "error"} />
-      </div>
-
-      {stats.totalDebt > 0 && (
-        <div className="alert alert-warning"><AlertTriangle size={18} /><span>بدهی مشتریان: {formatCurrency(stats.totalDebt)}</span></div>
-      )}
-
-      {stats.lowStockProducts.length > 0 && (
-        <div className="card bg-base-200"><div className="card-body p-4">
-          <h3 className="card-title text-sm text-warning">⚠️ موجودی کم (≤ ۳)</h3>
-          <div className="overflow-x-auto">
-            <table className="table table-zebra table-sm">
-              <thead><tr><th>محصول</th><th>موجودی</th></tr></thead>
-              <tbody>{stats.lowStockProducts.map((p, i) => (
-                <tr key={i}><td>{p.name}</td><td><span className="badge badge-error badge-sm">{p.quantity}</span></td></tr>
-              ))}</tbody>
-            </table>
+    <div className="space-y-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map((card, idx) => (
+          <div
+            key={idx}
+            className={`card bg-base-100 shadow-md border-t-4 border-${card.color} animate-fade-in`}
+            style={{ animationDelay: `${idx * 60}ms` }}
+          >
+            <div className="card-body p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-base-content/60 mb-1">{card.title}</p>
+                  <p className={`text-xl font-bold text-${card.color}`}>
+                    {card.value}
+                    {card.title === 'سود/زیان ماه' && (
+                      <span className="text-xs font-normal mr-1">
+                        {profit >= 0 ? '(سود)' : '(زیان)'}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className={`p-2 rounded-lg bg-${card.color}/10`}>
+                  <card.icon className={`w-6 h-6 text-${card.color}`} />
+                </div>
+              </div>
+            </div>
           </div>
-        </div></div>
+        ))}
+      </div>
+
+      {/* Debt Alert */}
+      {stats.totalDebt > 0 && (
+        <div className="alert alert-warning shadow-md animate-fade-in">
+          <AlertTriangle className="w-5 h-5" />
+          <div>
+            <h3 className="font-bold">هشدار بدهی</h3>
+            <p>مجموع بدهی مشتریان: {formatCurrency(stats.totalDebt)}</p>
+          </div>
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {stats.categorySales.length > 0 && (
-          <div className="card bg-base-200"><div className="card-body p-4">
-            <h3 className="card-title text-sm">📊 فروش دسته‌بندی</h3>
-            <div className="overflow-x-auto">
-              <table className="table table-sm"><thead><tr><th>دسته</th><th>درآمد</th></tr></thead>
-                <tbody>{stats.categorySales.map((c, i) => (<tr key={i}><td>{c.category}</td><td>{formatCurrency(c.total)}</td></tr>))}</tbody>
-              </table>
-            </div>
-          </div></div>
-        )}
-        {stats.topProducts.length > 0 && (
-          <div className="card bg-base-200"><div className="card-body p-4">
-            <h3 className="card-title text-sm">🏆 پرفروش‌ترین</h3>
-            <div className="overflow-x-auto">
-              <table className="table table-sm"><thead><tr><th>محصول</th><th>تعداد</th></tr></thead>
-                <tbody>{stats.topProducts.map((p, i) => (<tr key={i}><td>{p.name}</td><td>{formatNumber(p.qty)}</td></tr>))}</tbody>
-              </table>
-            </div>
-          </div></div>
-        )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Category Sales Chart */}
+        <div className="card bg-base-100 shadow-md animate-fade-in">
+          <div className="card-body">
+            <h2 className="card-title text-base">
+              <BarChart3 className="w-5 h-5 text-primary" />
+              فروش بر اساس دسته‌بندی
+            </h2>
+            {stats.categorySales.length === 0 ? (
+              <p className="text-sm text-base-content/60 text-center py-4">داده‌ای موجود نیست</p>
+            ) : (
+              <div className="space-y-3 mt-2">
+                {stats.categorySales.map((cat, idx) => {
+                  const widthPercent = maxCategorySale > 0 ? (cat.total / maxCategorySale) * 100 : 0;
+                  return (
+                    <div key={idx}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium">{cat.category}</span>
+                        <span className="text-base-content/70">{formatCurrency(cat.total)}</span>
+                      </div>
+                      <div className="w-full bg-base-200 rounded-full h-5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-l from-primary to-primary/60 transition-all duration-700"
+                          style={{ width: `${Math.max(widthPercent, 2)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Products */}
+        <div className="card bg-base-100 shadow-md animate-fade-in">
+          <div className="card-body">
+            <h2 className="card-title text-base">
+              <TrendingUp className="w-5 h-5 text-success" />
+              محصولات پرفروش
+            </h2>
+            {stats.topProducts.length === 0 ? (
+              <p className="text-sm text-base-content/60 text-center py-4">داده‌ای موجود نیست</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>محصول</th>
+                      <th>تعداد فروش</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.topProducts.map((p, idx) => (
+                      <tr key={idx} className="hover">
+                        <td>
+                          <span className={`badge badge-sm ${idx === 0 ? 'badge-warning' : idx === 1 ? 'badge-secondary' : 'badge-ghost'}`}>
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="font-medium">{p.name}</td>
+                        <td>{formatNumber(p.qty)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Low Stock Products */}
+      {stats.lowStockProducts.length > 0 && (
+        <div className="card bg-base-100 shadow-md animate-fade-in">
+          <div className="card-body">
+            <h2 className="card-title text-base">
+              <AlertTriangle className="w-5 h-5 text-warning" />
+              محصولات با موجودی کم
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>محصول</th>
+                    <th>موجودی</th>
+                    <th>وضعیت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.lowStockProducts.map((p, idx) => (
+                    <tr key={idx} className="hover">
+                      <td className="font-medium">{p.name}</td>
+                      <td>{formatNumber(p.quantity)}</td>
+                      <td>
+                        <span className={`badge badge-sm ${p.quantity === 0 ? 'badge-error' : 'badge-warning'}`}>
+                          {p.quantity === 0 ? 'تمام شده' : 'کم'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

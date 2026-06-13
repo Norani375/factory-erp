@@ -1,10 +1,32 @@
-"use client";
+'use client';
+
 import React from 'react';
 import {
-  LayoutDashboard, Package, Wrench, Users, ShoppingCart,
-  CreditCard, BarChart3, ClipboardList, ChevronLeft, ChevronRight, Wallet, Settings
+  LayoutDashboard,
+  Package,
+  Wrench,
+  ClipboardList,
+  Users,
+  ShoppingCart,
+  CreditCard,
+  Wallet,
+  BarChart3,
+  Settings,
+  Menu,
+  X,
 } from 'lucide-react';
-import { Page } from '@/app/page';
+
+export type Page =
+  | 'dashboard'
+  | 'products'
+  | 'materials'
+  | 'bom'
+  | 'customers'
+  | 'sales'
+  | 'debts'
+  | 'expenses'
+  | 'reports'
+  | 'settings';
 
 interface SidebarProps {
   currentPage: Page;
@@ -13,41 +35,82 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
-const menuItems: { page: Page; label: string; icon: React.ReactNode }[] = [
-  { page: 'dashboard', label: 'داشبورد', icon: <LayoutDashboard size={20} /> },
-  { page: 'products', label: 'محصولات نهایی', icon: <Package size={20} /> },
-  { page: 'materials', label: 'مواد مصرفی', icon: <Wrench size={20} /> },
-  { page: 'bom', label: 'فرمول ساخت (BOM)', icon: <ClipboardList size={20} /> },
-  { page: 'customers', label: 'مشتریان', icon: <Users size={20} /> },
-  { page: 'sales', label: 'فروش و فاکتور', icon: <ShoppingCart size={20} /> },
-  { page: 'debts', label: 'بدهی\u200cها', icon: <CreditCard size={20} /> },
-  { page: 'expenses', label: 'مصارف', icon: <Wallet size={20} /> },
-  { page: 'reports', label: 'گزارشات', icon: <BarChart3 size={20} /> },
-  { page: 'settings', label: 'تنظیمات', icon: <Settings size={20} /> },
+const menuItems: { page: Page; label: string; icon: React.ElementType }[] = [
+  { page: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
+  { page: 'products', label: 'محصولات نهایی', icon: Package },
+  { page: 'materials', label: 'مواد مصرفی', icon: Wrench },
+  { page: 'bom', label: 'فرمول ساخت (BOM)', icon: ClipboardList },
+  { page: 'customers', label: 'مشتریان', icon: Users },
+  { page: 'sales', label: 'فروش و فاکتور', icon: ShoppingCart },
+  { page: 'debts', label: 'بدهی‌ها', icon: CreditCard },
+  { page: 'expenses', label: 'مصارف', icon: Wallet },
+  { page: 'reports', label: 'گزارشات', icon: BarChart3 },
+  { page: 'settings', label: 'تنظیمات', icon: Settings },
 ];
 
 export default function Sidebar({ currentPage, onNavigate, collapsed, onToggle }: SidebarProps) {
+  const handleNav = (page: Page) => {
+    onNavigate(page);
+    // Close drawer on mobile after navigation
+    if (window.innerWidth < 768) {
+      onToggle();
+    }
+  };
+
   return (
-    <div className={`bg-base-200 h-full flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-56'}`}>
-      <div className="flex items-center justify-between p-3 border-b border-base-300">
-        {!collapsed && <span className="font-bold text-sm text-primary">🪵 نجاری ERP</span>}
-        <button className="btn btn-ghost btn-xs" onClick={onToggle}>
-          {collapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-        </button>
-      </div>
-      <ul className="menu gap-1 p-2 flex-1">
-        {menuItems.map((item) => (
-          <li key={item.page}>
-            <a
-              className={`flex items-center gap-3 ${currentPage === item.page ? 'active' : ''}`}
-              onClick={() => onNavigate(item.page)}
-            >
-              {item.icon}
-              {!collapsed && <span className="text-sm">{item.label}</span>}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <>
+      {/* Mobile floating menu button */}
+      <button
+        onClick={onToggle}
+        className="md:hidden fixed top-3 right-3 z-[60] btn btn-circle btn-primary shadow-lg no-print"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {/* Backdrop for mobile drawer */}
+      {!collapsed && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-[70] no-print"
+          onClick={onToggle}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed top-0 right-0 h-full bg-base-200 z-[80] transition-all duration-300 no-print
+          md:sticky md:top-0 md:z-10
+          ${collapsed ? 'w-0 md:w-16 overflow-hidden' : 'w-64 md:w-56'}
+        `}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-base-300">
+          {!collapsed && (
+            <h2 className="text-sm font-bold whitespace-nowrap">🏭 سیستم مدیریت کارخانه</h2>
+          )}
+          <button onClick={onToggle} className="btn btn-ghost btn-sm btn-circle">
+            {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Menu */}
+        <ul className="menu menu-sm gap-1 p-2">
+          {menuItems.map(({ page, label, icon: Icon }) => (
+            <li key={page}>
+              <button
+                onClick={() => handleNav(page)}
+                className={`flex items-center gap-3 rounded-lg ${
+                  currentPage === page ? 'active bg-primary text-primary-content' : ''
+                }`}
+                title={label}
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                {!collapsed && <span className="whitespace-nowrap">{label}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </>
   );
 }
