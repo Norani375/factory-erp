@@ -83,7 +83,18 @@ export default function Sales() {
       const res = await fetch('/api/invoices');
       if (!res.ok) throw new Error('خطا در دریافت فاکتورها');
       const data = await res.json();
-      setInvoices(data);
+      // Transform API data to match component expectations
+      const transformed = data.map((inv: any) => ({
+        ...inv,
+        invoice_number: inv.invoice_number || `INV-${inv.id}`,
+        date: inv.date || inv.created_at,
+        subtotal: Number(inv.total) || 0,
+        discount: Number(inv.discount) || 0,
+        paid: Number(inv.paid) || 0,
+        total: Number(inv.total) || 0,
+        remaining: (Number(inv.total) || 0) - (Number(inv.discount) || 0) - (Number(inv.paid) || 0),
+      }));
+      setInvoices(transformed);
     } catch (err: any) {
       toastError(err.message);
     } finally {
@@ -148,8 +159,18 @@ export default function Sales() {
     try {
       const res = await fetch(`/api/invoices/${inv.id}`);
       if (!res.ok) throw new Error('خطا در دریافت جزئیات');
-      const data = await res.json();
-      setSelectedInvoice(data);
+      const items = await res.json();
+      // API returns items array; combine with invoice data
+      const subtotal = items.reduce((s: number, it: any) => s + (Number(it.quantity) * Number(it.price)), 0);
+      setSelectedInvoice({
+        ...inv,
+        items: items,
+        subtotal: subtotal,
+        total: Number(inv.total) || 0,
+        discount: Number(inv.discount) || 0,
+        paid: Number(inv.paid) || 0,
+        remaining: (Number(inv.total) || 0) - (Number(inv.discount) || 0) - (Number(inv.paid) || 0),
+      });
       setShowDetail(true);
     } catch (err: any) {
       toastError(err.message);
@@ -192,16 +213,21 @@ export default function Sales() {
 
     setSaving(true);
     try {
-      const body = {
-        customer_id: formCustomerId,
-        date: formDate,
-        items: formItems.map(it => ({
+      const itemsData = formItems.map(it => ({
           product_id: it.product_id,
           quantity: it.quantity,
           price: it.price,
-        })),
+        }));
+      const calcTotal = itemsData.reduce((s, it) => s + it.quantity * it.price, 0);
+      const calcRemaining = calcTotal - formDiscount - formPaid;
+      const calcStatus = formPaid >= calcTotal - formDiscount ? 'paid' : formPaid > 0 ? 'partial' : 'unpaid';
+      const body = {
+        customer_id: formCustomerId,
+        total: calcTotal,
+        items: itemsData,
         discount: formDiscount,
         paid: formPaid,
+        status: calcStatus,
         notes: formNotes,
       };
 
